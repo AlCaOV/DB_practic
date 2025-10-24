@@ -1,0 +1,92 @@
+package org.example.service.impl;
+
+import lombok.RequiredArgsConstructor;
+import org.example.dto.request.UserRequest;
+import org.example.dto.response.UserResponse;
+import org.example.entity.User;
+import org.example.repository.UserRepository;
+import org.example.service.UserService;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.stereotype.Service;
+
+import java.time.LocalDateTime;
+import java.util.List;
+
+@Service
+@RequiredArgsConstructor
+public class UserServiceimpl implements UserService {
+
+    private final UserRepository userRepository;
+    private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
+    public UserServiceimpl(UserRepository userRepository) {
+        this.userRepository = userRepository;
+    }
+    // 🟢 CREATE
+    @Override
+    public UserResponse create(UserRequest request) {
+        User user = new User();
+        user.setemail(request.email());
+        user.setusername(request.username());
+        user.setpasswordHash(passwordEncoder.encode(request.password())); // ✅ Хешування
+        user.setCreatedAt(LocalDateTime.now());
+        user.setStatus(User.Status.active);
+
+        userRepository.save(user);
+        return toResponse(user);
+    }
+
+    // 🔵 READ ALL
+    @Override
+    public List<UserResponse> getAll() {
+        return userRepository.findAll().stream()
+                .map(this::toResponse)
+                .toList();
+    }
+
+    // 🔵 READ BY ID
+    @Override
+    public UserResponse getById(Long id) {
+        User user = userRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+        return toResponse(user);
+    }
+
+    // 🟠 UPDATE
+    @Override
+    public UserResponse update(Long id, UserRequest request) {
+        User user = userRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        user.setUsername(request.username());
+        user.setEmail(request.email());
+
+        // Якщо пароль змінюється
+        if (request.password() != null && !request.password().isBlank()) {
+            user.setPasswordHash(passwordEncoder.encode(request.password()));
+        }
+
+        userRepository.save(user);
+        return toResponse(user);
+    }
+
+    // 🔴 DELETE
+    @Override
+    public void delete(Long id) {
+        if (!userRepository.existsById(id)) {
+            throw new RuntimeException("User not found");
+        }
+        userRepository.deleteById(id);
+    }
+
+    // 🧩 Метод перетворення User → DTO
+    private UserResponse toResponse(User user) {
+        return new UserResponse(
+                user.getid(),
+                user.getpasswordHash(),
+                user.getCreatedAt(),
+                user.getStatus().name(),
+                user.getEmail(),
+                user.getUsername()
+        );
+    }
+}

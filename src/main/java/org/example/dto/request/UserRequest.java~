@@ -1,0 +1,13 @@
+package org.example.dto.request;
+
+import jakarta.validation.constraints.*;
+
+public record UserRequest(
+        Long id,
+        @Email @NotBlank String email,
+        @NotBlank @Size(min = 3, max = 50) String username,
+        @NotBlank @Size(min = 6, max = 100) String password,
+        String status
+) {}
+
+o
