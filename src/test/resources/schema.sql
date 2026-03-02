@@ -1,0 +1,33 @@
+CREATE TABLE IF NOT EXISTS "user" (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  email VARCHAR(255),
+  username VARCHAR(255),
+  password_hash VARCHAR(255),
+  created_at TIMESTAMP,
+  status VARCHAR(50)
+);
+
+CREATE TABLE IF NOT EXISTS "like" (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  post_id BIGINT,
+  user_id BIGINT,
+  created_at TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS likes (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  post_id BIGINT,
+  user_id BIGINT,
+  created_at TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS profile (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  user_id BIGINT UNIQUE,
+  bio TEXT,
+  avatar_url VARCHAR(1024)
+);
+
+CREATE TABLE IF NOT EXISTS stories (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  user_id BIGINT,
