@@ -1,11 +1,12 @@
 package org.example.dto.request;
 
+import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
 public record CommentUpdateRequest(
         Long id,
         Long postId,
         Long userId,
-        @Size(max = 1000) String body
+        @NotBlank  @Size(max = 24000) String body
 ) {}
 

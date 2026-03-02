@@ -5,11 +5,16 @@ import org.example.dto.request.CommentRequest;
 import org.example.dto.request.CommentUpdateRequest;
 import org.example.dto.response.CommentResponse;
 import org.example.entity.Comment;
+import org.example.entity.Post;
+import org.example.entity.User;
 import org.example.exception.EntityNotFoundException;
 import org.example.mapper.CommentMapper;
 import org.example.repository.CommentRepository;
+import org.example.repository.PostRepository;
+import org.example.service.AuthService;
 import org.example.service.CommentService;
 import org.springframework.stereotype.Service;
+import org.springframework.security.access.AccessDeniedException;
 
 import java.util.List;
 import java.util.stream.Collectors;
@@ -17,11 +22,16 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 public class CommentServiceImpl implements CommentService {
+
     private final CommentRepository commentRepository;
+    private final PostRepository postRepository;
+    private final AuthService userHelper;
 
     @Override
     public CommentResponse create(CommentRequest request) {
+        User currentUser = userHelper.getCurrentUser();
         Comment c = CommentMapper.toEntity(request);
+        c.setUser(currentUser);
         Comment saved = commentRepository.save(c);
         return CommentMapper.toResponse(saved);
     }
@@ -39,25 +49,44 @@ public class CommentServiceImpl implements CommentService {
 
     @Override
     public CommentResponse update(Long id, CommentUpdateRequest request) {
-        Comment c = commentRepository.findById(id).orElseThrow(() -> new EntityNotFoundException("Comment", id));
-        CommentMapper.updateEntity(c, request);
-        Comment saved = commentRepository.save(c);
+        Comment comment = commentRepository.findById(id)
+                .orElseThrow(() -> new EntityNotFoundException("Comment", id));
+
+        User currentUser = userHelper.getCurrentUser();
+
+        // Safe check for comment author
+        Long authorId = (comment.getUser() != null) ? comment.getUser().getId() : -1L;
+
+        if (!authorId.equals(currentUser.getId())) {
+            throw new AccessDeniedException("Ви не можете редагувати чужий коментар");
+        }
+
+        CommentMapper.updateEntity(comment, request);
+        Comment saved = commentRepository.save(comment);
         return CommentMapper.toResponse(saved);
     }
 
     @Override
     public void delete(Long id) {
-        if (!commentRepository.existsById(id)) throw new EntityNotFoundException("Comment", id);
-        commentRepository.deleteById(id);
+        Comment comment = commentRepository.findById(id)
+                .orElseThrow(() -> new EntityNotFoundException("Comment", id));
+
+        checkDeletePermissions(comment);
+        commentRepository.delete(comment);
     }
 
-    // --- nested resource methods (by post)
     @Override
     public CommentResponse createForPost(Long postId, CommentRequest request) {
-        // force postId into request entity
-        Comment reqEntity = CommentMapper.toEntity(request);
-        if (reqEntity.getPost() == null) { org.example.entity.Post p = new org.example.entity.Post(); p.setId(postId); reqEntity.setPost(p); }
-        Comment saved = commentRepository.save(reqEntity);
+        Post post = postRepository.findById(postId)
+                .orElseThrow(() -> new EntityNotFoundException("Post", postId));
+
+        User currentUser = userHelper.getCurrentUser();
+
+        Comment comment = CommentMapper.toEntity(request);
+        comment.setPost(post);
+        comment.setUser(currentUser);
+
+        Comment saved = commentRepository.save(comment);
         return CommentMapper.toResponse(saved);
     }
 
@@ -75,6 +104,14 @@ public class CommentServiceImpl implements CommentService {
     @Override
     public CommentResponse updateForPost(Long postId, Long commentId, CommentUpdateRequest request) {
         Comment c = commentRepository.findByIdAndPostId(commentId, postId).orElseThrow(() -> new EntityNotFoundException("Comment", commentId));
+
+        User currentUser = userHelper.getCurrentUser();
+        Long authorId = (c.getUser() != null) ? c.getUser().getId() : -1L;
+
+        if (!authorId.equals(currentUser.getId())) {
+            throw new AccessDeniedException("Ви не можете редагувати чужий коментар");
+        }
+
         CommentMapper.updateEntity(c, request);
         Comment saved = commentRepository.save(c);
         return CommentMapper.toResponse(saved);
@@ -82,15 +119,39 @@ public class CommentServiceImpl implements CommentService {
 
     @Override
     public void deleteForPost(Long postId, Long commentId) {
-        Comment c = commentRepository.findByIdAndPostId(commentId, postId).orElseThrow(() -> new EntityNotFoundException("Comment", commentId));
-        commentRepository.delete(c);
+        Comment comment = commentRepository.findByIdAndPostId(commentId, postId)
+                .orElseThrow(() -> new EntityNotFoundException("Comment", commentId));
+
+        checkDeletePermissions(comment);
+        commentRepository.delete(comment);
     }
 
-    // --- nested resource methods (by user)
+    // Приватний метод для перевірки прав видалення (DRY principle)
+    private void checkDeletePermissions(Comment comment) {
+        User currentUser = userHelper.getCurrentUser();
+        Long currentUserId = currentUser.getId();
+
+        Long commentAuthorId = (comment.getUser() != null) ? comment.getUser().getId() : -1L;
+
+        Long postAuthorId = -1L;
+        if (comment.getPost() != null && comment.getPost().getUser() != null) {
+            postAuthorId = comment.getPost().getUser().getId();
+        }
+
+        boolean isCommentOwner = currentUserId.equals(commentAuthorId);
+        boolean isPostOwner = currentUserId.equals(postAuthorId);
+        boolean isAdmin = userHelper.isAdmin();
+
+        if (!isCommentOwner && !isPostOwner && !isAdmin) {
+            throw new AccessDeniedException("Ви не маєте права видаляти цей коментар");
+        }
+    }
+
     @Override
     public CommentResponse createForUser(Long userId, CommentRequest request) {
+        User u = new User(); u.setId(userId);
         Comment reqEntity = CommentMapper.toEntity(request);
-        if (reqEntity.getUser() == null) { org.example.entity.User u = new org.example.entity.User(); u.setId(userId); reqEntity.setUser(u); }
+        reqEntity.setUser(u);
         Comment saved = commentRepository.save(reqEntity);
         return CommentMapper.toResponse(saved);
     }
@@ -109,6 +170,9 @@ public class CommentServiceImpl implements CommentService {
     @Override
     public CommentResponse updateForUser(Long userId, Long commentId, CommentUpdateRequest request) {
         Comment c = commentRepository.findByIdAndUserId(commentId, userId).orElseThrow(() -> new EntityNotFoundException("Comment", commentId));
+
+        // Тут також можна додати перевірку, якщо потрібно
+
         CommentMapper.updateEntity(c, request);
         Comment saved = commentRepository.save(c);
         return CommentMapper.toResponse(saved);
@@ -117,6 +181,7 @@ public class CommentServiceImpl implements CommentService {
     @Override
     public void deleteForUser(Long userId, Long commentId) {
         Comment c = commentRepository.findByIdAndUserId(commentId, userId).orElseThrow(() -> new EntityNotFoundException("Comment", commentId));
+        checkDeletePermissions(c);
         commentRepository.delete(c);
     }
 }

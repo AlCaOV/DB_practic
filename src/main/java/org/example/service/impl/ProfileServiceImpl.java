@@ -10,7 +10,9 @@ import org.example.exception.EntityNotFoundException;
 import org.example.mapper.ProfileMapper;
 import org.example.repository.ProfileRepository;
 import org.example.repository.UserRepository;
+import org.example.service.AuthService; // Імпорт
 import org.example.service.ProfileService;
+import org.springframework.security.access.AccessDeniedException; // Імпорт
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -21,14 +23,21 @@ import java.util.stream.Collectors;
 public class ProfileServiceImpl implements ProfileService {
     private final ProfileRepository repo;
     private final UserRepository userRepository;
+    private final AuthService userHelper; // Додали
 
     @Override
     public ProfileResponse create(ProfileRequest request) {
-        // Profile uses shared primary key mapped to User (MapsId). We must set a managed User entity.
         if (request.userId() == null) throw new IllegalArgumentException("userId is required for Profile creation");
+
+        // Перевірка: чи створюємо ми профіль для себе?
+        User currentUser = userHelper.getCurrentUser();
+        if (!currentUser.getId().equals(request.userId()) && !userHelper.isAdmin()) {
+            throw new AccessDeniedException("Ви не можете створити профіль для іншого користувача");
+        }
+
         User user = userRepository.findById(request.userId()).orElseThrow(() -> new EntityNotFoundException("User", request.userId()));
         Profile p = ProfileMapper.toEntity(request);
-        p.setUser(user); // set managed user so Hibernate can use its id for Profile PK
+        p.setUser(user);
         Profile saved = repo.save(p);
         return ProfileMapper.toResponse(saved);
     }
@@ -45,14 +54,31 @@ public class ProfileServiceImpl implements ProfileService {
     @Override
     public ProfileResponse update(Long userId, ProfileUpdateRequest request) {
         Profile p = repo.findById(userId).orElseThrow(() -> new EntityNotFoundException("Profile", userId));
+
+        User currentUser = userHelper.getCurrentUser();
+        if (!currentUser.getId().equals(userId)) {
+            throw new AccessDeniedException("Ви не можете редагувати чужий профіль");
+        }
+
         ProfileMapper.updateEntity(p, request);
-        // Do not change associated user via profile update — keep shared PK consistent
         Profile saved = repo.save(p);
         return ProfileMapper.toResponse(saved);
     }
 
     @Override
-    public void delete(Long userId) { if (!repo.existsById(userId)) throw new EntityNotFoundException("Profile", userId); repo.deleteById(userId); }
+    public void delete(Long userId) {
+        if (!repo.existsById(userId)) throw new EntityNotFoundException("Profile", userId);
+
+        User currentUser = userHelper.getCurrentUser();
+        boolean isOwner = currentUser.getId().equals(userId);
+        boolean isAdmin = userHelper.isAdmin();
+
+        if (!isOwner && !isAdmin) {
+            throw new AccessDeniedException("Ви не можете видалити чужий профіль");
+        }
+
+        repo.deleteById(userId);
+    }
 
     @Override
     public ProfileResponse createForUser(Long userId, ProfileRequest request) {

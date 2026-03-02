@@ -13,10 +13,13 @@ public class Friendship {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
-    @ManyToOne @JoinColumn(name = "follower_id")
-    private User follower;
-    @ManyToOne @JoinColumn(name = "followee_id")
-    private User followee;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "follower_id")
+    private User follower; // Це має співпадати з mappedBy = "follower"
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "followee_id") // або user_id, залежить як ти назвав
+    private User followee; // Це має співпадати з mappedBy = "followee"
     @Column(name="created_at")
     private LocalDateTime createdAt;
     @Enumerated(EnumType.STRING)

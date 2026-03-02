@@ -3,8 +3,12 @@ package org.example.entity;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
+import lombok.ToString;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
+
 @Entity
 @Table(name = "post")
 @Getter @Setter
@@ -12,9 +16,6 @@ public class Post {
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @ManyToOne
-    @JoinColumn(name = "user_id")
-    private User user;
 
     @Column(columnDefinition = "text")
     private String caption;
@@ -46,4 +47,22 @@ public class Post {
     public void preUpdate() {
         updatedAt = LocalDateTime.now();
     }
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id")
+    @ToString.Exclude
+    private User user;
+
+    @OneToMany(mappedBy = "post", cascade = CascadeType.ALL, orphanRemoval = true)
+    @ToString.Exclude
+    private List<Comment> comments = new ArrayList<>();
+
+    // 2. Якщо видаляємо Пост -> видаляються ЛАЙКИ
+    @OneToMany(mappedBy = "post", cascade = CascadeType.ALL, orphanRemoval = true)
+    @ToString.Exclude
+    private List<Likes> likes = new ArrayList<>();
+
+    // 3. Якщо видаляємо Пост -> видаляються КАРТИНКИ
+    @OneToMany(mappedBy = "post", cascade = CascadeType.ALL, orphanRemoval = true)
+    @ToString.Exclude
+    private List<MediaAsset> mediaAssets = new ArrayList<>();
 }

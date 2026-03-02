@@ -35,4 +35,6 @@ public class Stories {
     public void prePersist() {
         if (createdAt == null) createdAt = LocalDate.now();
     }
+
+
 }

@@ -29,7 +29,6 @@ public class UserMapper {
             try {
                 user.setStatus(User.Status.valueOf(request.status().toLowerCase()));
             } catch (IllegalArgumentException ignored) {
-                // якщо статус некоректний — ігноруємо (валідувати можна вище)
             }
         }
     }

@@ -7,7 +7,9 @@ import org.example.entity.User;
 import org.example.exception.UserNotFoundException;
 import org.example.mapper.UserMapper;
 import org.example.repository.UserRepository;
+import org.example.service.AuthService;
 import org.example.service.UserService;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 
@@ -21,6 +23,7 @@ public class UserServiceimpl implements UserService {
 
     private final UserRepository userRepository;
     private final BCryptPasswordEncoder passwordEncoder;
+    private final AuthService userHelper; // Додали для перевірки прав
 
     @Override
     public UserResponse create(UserRequest request) {
@@ -30,6 +33,7 @@ public class UserServiceimpl implements UserService {
                 .passwordHash(passwordEncoder.encode(request.password()))
                 .createdAt(LocalDateTime.now())
                 .status(User.Status.active)
+                // .role(Role.USER) <-- ПРИБРАЛИ, бо ролі в базі немає
                 .build();
 
         User savedUser = userRepository.save(user);
@@ -55,12 +59,17 @@ public class UserServiceimpl implements UserService {
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new UserNotFoundException(id));
 
-        // update fields (password hashed only if provided)
+        User currentUser = userHelper.getCurrentUser();
+        // Редагувати профіль може тільки сам користувач
+        if (!currentUser.getId().equals(id)) {
+            throw new AccessDeniedException("Ви не можете редагувати профіль іншого користувача");
+        }
+
+        // update fields
         if (request.password() != null) {
             user.setPasswordHash(passwordEncoder.encode(request.password()));
         }
 
-        // use mapper to apply other optional fields
         UserMapper.updateEntity(user, request);
 
         User saved = userRepository.save(user);
@@ -72,6 +81,21 @@ public class UserServiceimpl implements UserService {
         if (!userRepository.existsById(id)) {
             throw new UserNotFoundException(id);
         }
+
+        User currentUser = userHelper.getCurrentUser();
+        boolean isSelfDelete = currentUser.getId().equals(id);
+        boolean isAdmin = userHelper.isAdmin(); // Перевірка через конфіг (все працює)
+
+        // Видалити може: Сам користувач АБО Адмін
+        if (!isSelfDelete && !isAdmin) {
+            throw new AccessDeniedException("Ви не маєте права видалити цього користувача");
+        }
+
+        // Прибрали перевірку targetUser.getRole(), бо в базі немає такого поля.
+        // Якщо треба захистити адміна від видалення іншим адміном,
+        // це треба робити перевіркою username через список адмінів,
+        // але для початку достатньо поточної перевірки.
+
         userRepository.deleteById(id);
     }
 }
